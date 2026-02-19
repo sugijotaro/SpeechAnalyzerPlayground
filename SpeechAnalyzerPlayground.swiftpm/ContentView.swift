@@ -5,14 +5,19 @@ import SwiftUI
 
 struct ContentView: View {
     var body: some View {
+#if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             AnalyzerAndRecognizerView()
         } else {
             RecognizerOnlyView()
         }
+#else
+        RecognizerOnlyView()
+#endif
     }
 }
 
+#if compiler(>=6.2)
 @available(iOS 26.0, *)
 enum ManagerType: String, CaseIterable {
     case analyzer = "SpeechAnalyzer"
@@ -115,6 +120,7 @@ private struct AnalyzerAndRecognizerView: View {
         }
     }
 }
+#endif
 
 private struct RecognizerOnlyView: View {
     @State private var recognizerManager = SpeechRecognizerManager()

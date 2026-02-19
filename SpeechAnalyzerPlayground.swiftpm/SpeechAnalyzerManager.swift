@@ -11,6 +11,8 @@ import Foundation
 import Speech
 import SwiftUI
 
+#if canImport(Speech) && compiler(>=6.2)
+
 @available(iOS 26.0, *)
 enum TranscriptionError: Error {
     case localeNotSupported
@@ -257,3 +259,22 @@ private extension SpeechAnalyzerManager {
         }
     }
 }
+
+#else
+
+@Observable
+final class SpeechAnalyzerManager {
+    var volatileText: AttributedString = ""
+    var finalizedText: AttributedString = ""
+    var isRecording = false
+
+    func startAnalyzer() {
+        // SpeechAnalyzer API is unavailable on this toolchain / SDK.
+    }
+
+    func stopAnalyzer() {
+        // SpeechAnalyzer API is unavailable on this toolchain / SDK.
+    }
+}
+
+#endif
