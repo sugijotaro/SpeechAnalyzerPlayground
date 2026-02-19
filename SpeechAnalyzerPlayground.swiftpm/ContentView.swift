@@ -19,7 +19,7 @@ struct ContentView: View {
 
 #if compiler(>=6.2)
 @available(iOS 26.0, *)
-enum ManagerType: String, CaseIterable {
+private enum ManagerType: String {
     case analyzer = "SpeechAnalyzer"
     case recognizer = "SFSpeechRecognizer"
 
@@ -37,7 +37,8 @@ enum ManagerType: String, CaseIterable {
 private struct AnalyzerAndRecognizerView: View {
     @State private var analyzerManager = SpeechAnalyzerManager()
     @State private var recognizerManager = SpeechRecognizerManager()
-    @State private var selectedManager: ManagerType = .analyzer
+    @State private var selectedManager: ManagerType = .recognizer
+    @State private var hasSelectedManager = false
 
     private var isRecording: Bool {
         selectedManager == .analyzer ? analyzerManager.isRecording : recognizerManager.isRecording
@@ -64,7 +65,11 @@ private struct AnalyzerAndRecognizerView: View {
                         if isRecording {
                             analyzerManager.stopAnalyzer()
                         } else {
-                            analyzerManager.startAnalyzer()
+                            analyzerManager.startAnalyzer { error in
+                                print("[Speech] SpeechAnalyzer failed (\(error)). Falling back to SFSpeechRecognizer.")
+                                selectedManager = .recognizer
+                                recognizerManager.startRecognition()
+                            }
                         }
                     } else {
                         if isRecording {
@@ -90,31 +95,16 @@ private struct AnalyzerAndRecognizerView: View {
             }
             .padding()
             .navigationTitle("音声認識")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
-                        ForEach(ManagerType.allCases, id: \.self) { managerType in
-                            Button(action: {
-                                if selectedManager == .analyzer && analyzerManager.isRecording {
-                                    analyzerManager.stopAnalyzer()
-                                } else if selectedManager == .recognizer && recognizerManager.isRecording {
-                                    recognizerManager.stopRecognition()
-                                }
+            .task {
+                guard !hasSelectedManager else { return }
+                hasSelectedManager = true
 
-                                selectedManager = managerType
-                            }) {
-                                HStack {
-                                    Text(managerType.displayName)
-                                    if selectedManager == managerType {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "gearshape.fill")
-                            .foregroundColor(.blue)
-                    }
+                if await analyzerManager.canUseAnalyzer() {
+                    selectedManager = .analyzer
+                    print("[Speech] Using SpeechAnalyzer.")
+                } else {
+                    selectedManager = .recognizer
+                    print("[Speech] SpeechAnalyzer unavailable. Using SFSpeechRecognizer.")
                 }
             }
         }
@@ -124,6 +114,7 @@ private struct AnalyzerAndRecognizerView: View {
 
 private struct RecognizerOnlyView: View {
     @State private var recognizerManager = SpeechRecognizerManager()
+    @State private var hasPrintedEngine = false
 
     var body: some View {
         NavigationStack {
@@ -161,6 +152,11 @@ private struct RecognizerOnlyView: View {
             }
             .padding()
             .navigationTitle("音声認識")
+            .task {
+                guard !hasPrintedEngine else { return }
+                hasPrintedEngine = true
+                print("[Speech] SpeechAnalyzer unavailable on this OS. Using SFSpeechRecognizer.")
+            }
         }
     }
 }

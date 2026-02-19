@@ -84,6 +84,8 @@ final class SpeechAnalyzerManager {
     private var recognitionTask: Task<(), Error>?
     private var audioBufferContinuation: AsyncStream<AVAudioPCMBuffer>.Continuation?
     private var analyzerFormat: AVAudioFormat?
+    private var hasInputTap = false
+    private var isStopping = false
 
     var volatileText: AttributedString = ""
     var finalizedText: AttributedString = ""
@@ -100,8 +102,19 @@ final class SpeechAnalyzerManager {
     }
 
     // MARK: - Speech Analyzer
+    func canUseAnalyzer() async -> Bool {
+        guard await supported(locale: Locale.ja) else {
+            return false
+        }
+
+        return await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [speechTranscriber]) != nil
+    }
+
     func setupAnalyzer() async throws {
         self.analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [speechTranscriber])
+        guard analyzerFormat != nil else {
+            throw TranscriptionError.analyzerUnavailable
+        }
 
         try await ensureModel(transcriber: speechTranscriber, locale: Locale.ja)
 
@@ -126,9 +139,14 @@ final class SpeechAnalyzerManager {
         }
     }
 
-    func startAnalyzer() {
+    func startAnalyzer(onFailure: ((Error) -> Void)? = nil) {
         Task {
             do {
+                guard !isRecording else {
+                    print("analyzer is still in progress")
+                    return
+                }
+
                 try await setupAnalyzer()
 
                 guard let inputSequence, let inputBuilder else {
@@ -158,6 +176,20 @@ final class SpeechAnalyzerManager {
                 }
             } catch {
                 print("analyze failure: \(error)")
+                recognitionTask?.cancel()
+                recognitionTask = nil
+                inputBuilder?.finish()
+                inputBuilder = nil
+                inputSequence = nil
+                stopAudioEngine()
+                try? deactivateAudioSession()
+
+                await MainActor.run {
+                    isRecording = false
+                    if !isStopping {
+                        onFailure?(error)
+                    }
+                }
             }
         }
     }
@@ -165,11 +197,16 @@ final class SpeechAnalyzerManager {
     func stopAnalyzer() {
         Task {
             do {
+                isStopping = true
+                defer { isStopping = false }
+
                 stopAudioEngine()
 
                 try deactivateAudioSession()
 
                 inputBuilder?.finish()
+                inputBuilder = nil
+                inputSequence = nil
 
                 try await speechAnalyzer.finalizeAndFinishThroughEndOfInput()
 
@@ -214,6 +251,7 @@ private extension SpeechAnalyzerManager {
             guard let self = self else { return }
             self.audioBufferContinuation?.yield(buffer)
         }
+        hasInputTap = true
 
         audioEngine.prepare()
         try audioEngine.start()
@@ -224,8 +262,17 @@ private extension SpeechAnalyzerManager {
     }
 
     func stopAudioEngine() {
-        audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
+        if audioEngine.isRunning {
+            audioEngine.stop()
+        }
+
+        if hasInputTap {
+            audioEngine.inputNode.removeTap(onBus: 0)
+            hasInputTap = false
+        }
+
+        audioBufferContinuation?.finish()
+        audioBufferContinuation = nil
     }
 }
 
@@ -268,7 +315,11 @@ final class SpeechAnalyzerManager {
     var finalizedText: AttributedString = ""
     var isRecording = false
 
-    func startAnalyzer() {
+    func canUseAnalyzer() async -> Bool {
+        false
+    }
+
+    func startAnalyzer(onFailure: ((Error) -> Void)? = nil) {
         // SpeechAnalyzer API is unavailable on this toolchain / SDK.
     }
 
