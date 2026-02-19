@@ -20,7 +20,7 @@ let package = Package(
             teamIdentifier: "SY69L98Q38",
             displayVersion: "1.0",
             bundleVersion: "1",
-            appIcon: .placeholder(icon: .palette),
+            appIcon: .placeholder(icon: .mic),
             accentColor: .presetColor(.pink),
             supportedDeviceFamilies: [
                 .pad,
@@ -31,6 +31,10 @@ let package = Package(
                 .landscapeRight,
                 .landscapeLeft,
                 .portraitUpsideDown(.when(deviceFamilies: [.pad]))
+            ],
+            capabilities: [
+                .microphone(purposeString: "音声入力を文字起こしするためにマイクへのアクセスが必要です。"),
+                .speechRecognition(purposeString: "音声を文字に変換するために音声認識機能を使用します。")
             ]
         )
     ],
@@ -40,5 +44,5 @@ let package = Package(
             path: "."
         )
     ],
-    swiftLanguageVersions: [.v6]
+    swiftLanguageVersions: [.v5]
 )
